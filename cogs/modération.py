@@ -67,48 +67,47 @@ class Moderation(commands.Cog):
         save_tempbans(self.temp_bans)
 
     # --- MUTE SYSTEM ---
-    async def _handle_mute(self, interaction_or_ctx, member: discord.Member, duration: str, reason: str):
-        author = interaction_or_ctx.user if isinstance(interaction_or_ctx, discord.Interaction) else interaction_or_ctx.author
-        guild = interaction_or_ctx.guild
+    async def _handle_mute(self, ctx_or_inter, member: discord.Member, duration: str, reason: str):
+        author = ctx_or_inter.user if isinstance(ctx_or_inter, discord.Interaction) else ctx_or_inter.author
+        guild = ctx_or_inter.guild
 
         if member == author:
             msg = "Tu veux te faire taire toi-même ? Calmos."
-            if isinstance(interaction_or_ctx, discord.Interaction):
-                return await interaction_or_ctx.response.send_message(msg, ephemeral=True)
+            if hasattr(ctx_or_inter, "response"):
+                return await ctx_or_inter.response.send_message(msg, ephemeral=True)
             else:
-                return await interaction_or_ctx.reply(msg)
+                return await ctx_or_inter.reply(msg)
 
         if member.top_role >= author.top_role and author != guild.owner:
             msg = "Pas le droit de faire taire plus haut ou égal que toi."
-            if isinstance(interaction_or_ctx, discord.Interaction):
-                return await interaction_or_ctx.response.send_message(msg, ephemeral=True)
+            if hasattr(ctx_or_inter, "response"):
+                return await ctx_or_inter.response.send_message(msg, ephemeral=True)
             else:
-                return await interaction_or_ctx.reply(msg)
+                return await ctx_or_inter.reply(msg)
 
         time = parse_duration(duration) if duration else None
         if duration and not time:
             msg = "Format de durée invalide. Ex : 10s / 5mn / 2h / 1j"
-            if isinstance(interaction_or_ctx, discord.Interaction):
-                return await interaction_or_ctx.response.send_message(msg, ephemeral=True)
+            if hasattr(ctx_or_inter, "response"):
+                return await ctx_or_inter.response.send_message(msg, ephemeral=True)
             else:
-                return await interaction_or_ctx.reply(msg)
+                return await ctx_or_inter.reply(msg)
 
         try:
             await member.timeout(time, reason=reason)
         except discord.Forbidden:
             msg = "J’ai pas le droit de le faire taire celui-là."
-            if isinstance(interaction_or_ctx, discord.Interaction):
-                return await interaction_or_ctx.response.send_message(msg, ephemeral=True)
+            if hasattr(ctx_or_inter, "response"):
+                return await ctx_or_inter.response.send_message(msg, ephemeral=True)
             else:
-                return await interaction_or_ctx.reply(msg)
+                return await ctx_or_inter.reply(msg)
         except Exception as e:
             msg = f"Erreur : {e}"
-            if isinstance(interaction_or_ctx, discord.Interaction):
-                return await interaction_or_ctx.response.send_message(msg, ephemeral=True)
+            if hasattr(ctx_or_inter, "response"):
+                return await ctx_or_inter.response.send_message(msg, ephemeral=True)
             else:
-                return await interaction_or_ctx.reply(msg)
+                return await ctx_or_inter.reply(msg)
 
-        # MP
         dm_embed = discord.Embed(
             title="🔇 Tu as été réduit au silence",
             description=f"Tu as été mute dans **{guild.name}**.",
@@ -129,28 +128,22 @@ class Moderation(commands.Cog):
             msg += f" Durée : {duration}."
         msg += f"\n📝 Raison : {reason}"
 
-        if isinstance(interaction_or_ctx, discord.Interaction):
-            await interaction_or_ctx.response.send_message(msg)
+        # Répondre proprement dans les deux contextes
+        if hasattr(ctx_or_inter, "response") and not ctx_or_inter.response.is_done():
+            await ctx_or_inter.response.send_message(msg)
         else:
-            await interaction_or_ctx.reply(msg)
+            await ctx_or_inter.reply(msg)
 
-    @commands.command(name="mute")
+    @commands.hybrid_command(name="mute", description="Réduit quelqu'un au silence")
     @commands.has_permissions(moderate_members=True)
-    async def mute_prefix(self, ctx, member: discord.Member, duration: str = None, *, reason: str = "Aucune raison précisée"):
+    async def mute(self, ctx, member: discord.Member, duration: str = None, *, reason: str = "Aucune raison précisée"):
+        """Mute (timeout) un membre (slash et prefix)."""
         await self._handle_mute(ctx, member, duration, reason)
 
-    @app_commands.command(name="mute", description="Réduit quelqu'un au silence")
-    @app_commands.describe(member="Membre à mute", duration="Durée ex: 10s/mn/h/j", reason="Raison")
-    async def mute_slash(self, interaction: discord.Interaction, member: discord.Member, duration: str = None, reason: str = "Aucune raison précisée"):
-        await self._handle_mute(interaction, member, duration, reason)
-
-    @commands.Cog.listener()
-    async def on_ready(self):
-        self.bot.tree.add_command(self.mute_slash)
-
-    @commands.command(name="unmute")
+    @commands.hybrid_command(name="unmute", description="Rend la parole à un membre")
     @commands.has_permissions(moderate_members=True)
     async def unmute(self, ctx, member: discord.Member, *, reason: str = "Aucune raison précisée"):
+        """Unmute (timeout None) un membre (slash et prefix)."""
         if not member.timed_out_until:
             return await ctx.reply("Ce membre n’est pas réduit au silence.")
         try:
@@ -174,11 +167,6 @@ class Moderation(commands.Cog):
             pass
 
         await ctx.reply(f"🔊 {member.mention} peut de nouveau s’exprimer.\n📝 Raison : {reason}")
-
-    @commands.hybrid_command(name="unmute")
-    @commands.has_permissions(moderate_members=True)
-    async def slash_unmute(self, ctx, member: discord.Member, *, reason: str = "Aucune raison précisée"):
-        await self.unmute(ctx, member, reason=reason)
 
     # --- KICK SYSTEM ---
     @commands.command(name="kick")

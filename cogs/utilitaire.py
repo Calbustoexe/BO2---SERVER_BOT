@@ -1,27 +1,31 @@
 import discord
 from discord.ext import commands
-from discord import app_commands, Embed, Forbidden, Member
+from discord import app_commands, Embed, Forbidden, Interaction
 import datetime
 import time
 import re
 import json
 import os
 from discord.ui import Button, View
-from discord import ButtonStyle, Interaction
+from discord import ButtonStyle
 import asyncio
 import random
 
 class Utilitaire(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        # For hidden channels and logs, ensure persistence in memory
+        self.hidden_channels = {}
+        self.logs = {}
 
+    # ----------- Utils ----------
     def parse_duration(self, duration_str):
+        """Parse une durée en s/mn/h et retourne le nombre de secondes (max 6h)."""
         match = re.fullmatch(r"(\d+)(s|mn|h)", duration_str)
         if not match:
             return None
         amount, unit = match.groups()
         amount = int(amount)
-
         if unit == "s":
             seconds = amount
         elif unit == "mn":
@@ -30,16 +34,15 @@ class Utilitaire(commands.Cog):
             seconds = amount * 3600
         else:
             return None
-
         return seconds if 0 <= seconds <= 21600 else None
 
+    # ----------- Slowmode ----------
     @commands.command(name="slowmode", aliases=["sm"])
     @commands.has_permissions(manage_channels=True)
     async def slowmode(self, ctx, duration: str):
         seconds = self.parse_duration(duration)
         if seconds is None:
             return await ctx.reply("Durée invalide ou au-delà de 6h. Format accepté : 10s / 5mn / 1h")
-
         try:
             await ctx.channel.edit(slowmode_delay=seconds)
             if seconds == 0:
@@ -49,18 +52,17 @@ class Utilitaire(commands.Cog):
         except Exception as e:
             await ctx.reply(f"Erreur : {e}")
 
+    # ----------- MP -----------
     @commands.hybrid_command(name='mp', description="Envoie un MP à un membre")
     async def mp(self, ctx, member: discord.Member = None, *, message: str = None):
         """Envoie un MP à un membre (commande hybride)."""
+        if not member:
+            await ctx.send("Vous devez mentionner un membre pour envoyer un MP.")
+            return
+        if not message:
+            await ctx.send("Vous devez fournir un message à envoyer.")
+            return
         try:
-            # Validation des arguments
-            if not member:
-                await ctx.send("Vous devez mentionner un membre pour envoyer un MP.")
-                return
-            if not message:
-                await ctx.send("Vous devez fournir un message à envoyer.")
-                return
-
             await member.send(message)
             await ctx.send(f"Message envoyé à {member.mention}.")
         except discord.Forbidden:
@@ -68,6 +70,7 @@ class Utilitaire(commands.Cog):
         except Exception as e:
             await ctx.send(f"Une erreur est survenue : {str(e)}")
 
+    # ----------- Say (slash + prefix) -----------
     @app_commands.command(name="envoie", description="Envoyer un message sous l'identité du bot.")
     async def say_slash(self, interaction: discord.Interaction, message: str):
         if not interaction.user.guild_permissions.manage_channels:
@@ -76,7 +79,6 @@ class Utilitaire(commands.Cog):
         await interaction.channel.send(message)
         await interaction.response.send_message(f"✅ Message envoyé avec succès !\n'{message}'", ephemeral=True)
 
-    # Commande préfixe +say
     @commands.command(name="envoie")
     @commands.has_permissions(manage_channels=True)
     async def say_prefix(self, ctx, *, message: str):
@@ -86,28 +88,33 @@ class Utilitaire(commands.Cog):
         except discord.errors.NotFound:
             pass
 
+    # ----------- Purge -----------
     @commands.hybrid_command(name="supprimer", aliases=["supp"], with_app_command=True)
     @commands.has_permissions(manage_messages=True)
     async def supprimer(self, ctx: commands.Context, nombre: int):
-        await ctx.message.delete()  # Supprime le message de commande immédiatement.
+        # Supprime le message de commande immédiatement, sauf avec slash
+        if hasattr(ctx, "message"):
+            try:
+                await ctx.message.delete()
+            except Exception:
+                pass
 
         if nombre < 1:
             await ctx.send("Vous devez indiquer un nombre valide supérieur à 0.", delete_after=5)
             return
 
         deleted = await ctx.channel.purge(limit=nombre)
-        
-        # Message de confirmation.
-        confirmation = await ctx.send(f"🗑️ {len(deleted)} message(s) supprimé(s).")
-        await confirmation.delete(delay=5)
+        try:
+            confirmation = await ctx.send(f"🗑️ {len(deleted)} message(s) supprimé(s).", delete_after=5)
+        except Exception:
+            pass
 
+    # ----------- Générateur de timestamp -----------
     @commands.command(name="faituntimelessde")
     @commands.has_permissions(manage_messages=True)
     async def faituntimelessde(self, ctx, duration: str):
         """Génère un timestamp Discord et l'affiche en embed + DM au membre."""
         unit_mapping = {"s": 1, "m": 60, "h": 3600, "j": 86400}
-
-        # Vérification de l'entrée utilisateur
         try:
             value, unit = int(duration[:-1]), duration[-1].lower()
             if unit not in unit_mapping:
@@ -115,23 +122,15 @@ class Utilitaire(commands.Cog):
         except ValueError:
             await ctx.send("**Format invalide !** Utilise : `+faituntimelessde [nombre][s/m/h/j]`")
             return
-
-        # Calcul du timestamp
         current_time = int(time.time())
         target_time = current_time + (value * unit_mapping[unit])
-
-        # Formatage du timestamp pour Discord
         discord_timestamp = f"<t:{target_time}:R>"
-
-        # Envoi du message dans le salon
         embed = discord.Embed(
             title="à ton service",
             description=f"{discord_timestamp}",
             color=discord.Color.blue()
         )
         await ctx.send(embed=embed)
-
-        # Envoi du timestamp en MP
         try:
             embed_dm = discord.Embed(
                 title="Regarde",
@@ -142,29 +141,24 @@ class Utilitaire(commands.Cog):
         except discord.Forbidden:
             await ctx.send("impossible d'envoyer le timestamp en MP.")
 
-
+    # ----------- Hide/Unhide Channel -----------
     @commands.command(name="hide")
     @commands.has_permissions(manage_guild=True)
     async def hide(self, ctx, channel: discord.TextChannel = None):
         """Cache un salon pour tout le monde sauf les modérateurs."""
         if channel is None:
-            channel = ctx.channel  # Par défaut, cache le salon actuel
-
-        everyone_role = ctx.guild.default_role  # Rôle @everyone
-        mod_role = ctx.guild.get_role(1145807576353742908)  # Rôle modérateur
-
+            channel = ctx.channel
+        everyone_role = ctx.guild.default_role
+        mod_role = ctx.guild.get_role(1145807576353742908)
         # Sauvegarde des permissions avant modification
         if channel.id not in self.hidden_channels:
             self.hidden_channels[channel.id] = {
                 role.id: channel.overwrites.get(role) for role in ctx.guild.roles if role.position < mod_role.position
             }
-
-        # Appliquer les restrictions
         await channel.set_permissions(everyone_role, view_channel=False)
         for role in ctx.guild.roles:
             if role.position < mod_role.position and role != everyone_role:
                 await channel.set_permissions(role, view_channel=False)
-
         await ctx.send(f"le salon {channel.mention} est maintenant caché.")
 
     @commands.command(name="unhide")
@@ -172,25 +166,20 @@ class Utilitaire(commands.Cog):
     async def unhide(self, ctx, channel: discord.TextChannel = None):
         """Rend un salon visible à nouveau en restaurant les permissions initiales."""
         if channel is None:
-            channel = ctx.channel  # Par défaut, restaure le salon actuel
-
+            channel = ctx.channel
         if channel.id not in self.hidden_channels:
             await ctx.send("déjà visible par tous")
             return
-
         # Restauration des permissions originales
         for role_id, overwrite in self.hidden_channels[channel.id].items():
             role = ctx.guild.get_role(role_id)
             if role:
                 await channel.set_permissions(role, overwrite=overwrite)
-
-        del self.hidden_channels[channel.id]  # Supprime les données sauvegardées
-
+        del self.hidden_channels[channel.id]
         await ctx.send(f"tout le monde peut à nouveau voir {channel.mention}.")
 
     @hide.error
     async def hide_error(self, ctx, error):
-        """Gestion des erreurs de la commande hide"""
         if isinstance(error, commands.MissingPermissions):
             await ctx.send("❌ **Tu n'as pas la permission pour cette commande**")
         elif isinstance(error, commands.ChannelNotFound):
@@ -198,37 +187,37 @@ class Utilitaire(commands.Cog):
         else:
             await ctx.send("❌ **Oups, une erreur est survenue**")
 
+    # ----------- Logging Events -----------
     async def log_event(self, event_type, user, target, details):
         event_data = {
             "event_type": event_type,
             "user": user.name,
             "user_id": user.id,
-            "target": target.name if isinstance(target, discord.Member) else target.id,
-            "target_id": target.id if isinstance(target, discord.Member) else None,
+            "target": target.name if isinstance(target, discord.Member) else str(target),
+            "target_id": str(target.id) if hasattr(target, "id") else str(target),
             "details": details,
-            "timestamp": datetime.utcnow().strftime("%d/%m/%Y %H:%M")
+            "timestamp": datetime.datetime.utcnow().strftime("%d/%m/%Y %H:%M")
         }
-        if target.id not in self.logs:
-            self.logs[target.id] = []
-        self.logs[target.id].append(event_data)
+        if not hasattr(self, "logs"):
+            self.logs = {}
+        if event_data["target_id"] not in self.logs:
+            self.logs[event_data["target_id"]] = []
+        self.logs[event_data["target_id"]].append(event_data)
         with open('event_logs.json', 'w') as f:
             json.dump(self.logs, f, indent=4)
 
+    # ----------- Message All -----------
     @commands.hybrid_command(name="message_all", description="Envoyer un message à tout le monde dans le serveur.")
     @commands.has_permissions(administrator=True)
     async def message_all(self, ctx, title: str, content: str, footer: str, color: str = "#3498db"):
-        """Envoi un message à tous les membres du serveur avec un embed et des boutons."""
-        
         embed = self.create_embed(title, content, footer, color)
         buttons = self.create_buttons(ctx, embed)
-
         preview_msg = await ctx.send(
             embed=embed,
             content="**Prévisualisation** : ajustez avant l'envoi :",
             view=buttons,
             ephemeral=True
         )
-
         buttons.preview_msg = preview_msg
         buttons.embed = embed
 
@@ -243,7 +232,6 @@ class Utilitaire(commands.Cog):
 
     def create_buttons(self, ctx, embed):
         buttons = View(timeout=300)
-
         confirm_button = Button(label="Confirmer", style=ButtonStyle.green)
         cancel_button = Button(label="Annuler", style=ButtonStyle.red)
         edit_button = Button(label="Modifier", style=ButtonStyle.blurple)
@@ -284,59 +272,56 @@ class Utilitaire(commands.Cog):
         buttons.add_item(cancel_button)
         buttons.add_item(edit_button)
         buttons.add_item(color_button)
-
         return buttons
 
     async def send_to_all_members(self, guild, embed):
         failed_members = []
-        count = 0
         for member in guild.members:
             if not member.bot:
                 try:
                     await member.send(embed=embed)
-                    count += 1
-                    await asyncio.sleep(random.randint(10, 15))  # Délai de 10 à 15 secondes
+                    await asyncio.sleep(random.uniform(1.0, 2.5))  # Délai réduit pour éviter blocage
                 except discord.Forbidden:
-                    continue
+                    failed_members.append(str(member))
                 except Exception:
                     failed_members.append(str(member))
         return len(failed_members)
 
     async def handle_edit(self, interaction, embed):
         await interaction.response.send_message("📝 Entrez les champs à modifier (`titre`, `contenu`, `footer`).", ephemeral=True)
-
         def check(msg):
             return msg.author == interaction.user and msg.channel == interaction.channel
-
-        msg = await self.bot.wait_for('message', check=check)
+        try:
+            msg = await self.bot.wait_for('message', check=check, timeout=120)
+        except asyncio.TimeoutError:
+            await interaction.followup.send("⏳ Temps écoulé.", ephemeral=True)
+            return
         fields_to_edit = msg.content.split()
         for field in fields_to_edit:
             if field == "titre":
                 await interaction.followup.send("Entrez le nouveau titre :", ephemeral=True)
-                title_msg = await self.bot.wait_for('message', check=check)
+                title_msg = await self.bot.wait_for('message', check=check, timeout=60)
                 embed.title = title_msg.content
             elif field == "contenu":
                 await interaction.followup.send("Entrez le nouveau contenu :", ephemeral=True)
-                content_msg = await self.bot.wait_for('message', check=check)
+                content_msg = await self.bot.wait_for('message', check=check, timeout=60)
                 embed.description = content_msg.content
             elif field == "footer":
                 await interaction.followup.send("Entrez le nouveau footer :", ephemeral=True)
-                footer_msg = await self.bot.wait_for('message', check=check)
+                footer_msg = await self.bot.wait_for('message', check=check, timeout=60)
                 embed.set_footer(text=footer_msg.content)
         await interaction.edit_original_response(embed=embed)
 
     async def handle_color_change(self, interaction, embed):
         await interaction.response.send_message("🎨 Entrez une nouvelle couleur en hexadécimal.", ephemeral=True)
-
         def check(msg):
             return msg.author == interaction.user and msg.channel == interaction.channel
-
-        color_msg = await self.bot.wait_for('message', check=check)
         try:
+            color_msg = await self.bot.wait_for('message', check=check, timeout=60)
             embed.color = int(color_msg.content.strip("#"), 16)
             await interaction.edit_original_response(embed=embed)
-        except ValueError:
-            await interaction.followup.send("❌ Couleur invalide.", ephemeral=True)
-            
+        except (ValueError, asyncio.TimeoutError):
+            await interaction.followup.send("❌ Couleur invalide ou délai dépassé.", ephemeral=True)
+
 async def setup(bot):
     await bot.add_cog(Utilitaire(bot))
