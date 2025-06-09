@@ -1,6 +1,5 @@
 import discord
 from discord.ext import commands, tasks
-from discord import app_commands
 import datetime
 from datetime import timedelta
 import asyncio
@@ -25,7 +24,6 @@ def load_tempbans():
     if not os.path.exists(TEMPBAN_FILE):
         return {}
     with open(TEMPBAN_FILE, "r") as f:
-        # Convert datetime strings back to datetime objects
         raw = json.load(f)
         bans = {}
         for gid, users in raw.items():
@@ -59,7 +57,7 @@ class Moderation(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.warns = load_warns()
-        self.temp_bans = load_tempbans()  # {guild_id: {user_id: unban_time}}
+        self.temp_bans = load_tempbans()
         self.check_tempbans.start()
 
     def cog_unload(self):
@@ -128,7 +126,6 @@ class Moderation(commands.Cog):
             msg += f" Durée : {duration}."
         msg += f"\n📝 Raison : {reason}"
 
-        # Répondre proprement dans les deux contextes
         if hasattr(ctx_or_inter, "response") and not ctx_or_inter.response.is_done():
             await ctx_or_inter.response.send_message(msg)
         else:
@@ -137,13 +134,11 @@ class Moderation(commands.Cog):
     @commands.hybrid_command(name="mute", description="Réduit quelqu'un au silence")
     @commands.has_permissions(moderate_members=True)
     async def mute(self, ctx, member: discord.Member, duration: str = None, *, reason: str = "Aucune raison précisée"):
-        """Mute (timeout) un membre (slash et prefix)."""
         await self._handle_mute(ctx, member, duration, reason)
 
     @commands.hybrid_command(name="unmute", description="Rend la parole à un membre")
     @commands.has_permissions(moderate_members=True)
     async def unmute(self, ctx, member: discord.Member, *, reason: str = "Aucune raison précisée"):
-        """Unmute (timeout None) un membre (slash et prefix)."""
         if not member.timed_out_until:
             return await ctx.reply("Ce membre n’est pas réduit au silence.")
         try:
@@ -169,7 +164,7 @@ class Moderation(commands.Cog):
         await ctx.reply(f"🔊 {member.mention} peut de nouveau s’exprimer.\n📝 Raison : {reason}")
 
     # --- KICK SYSTEM ---
-    @commands.command(name="kick")
+    @commands.hybrid_command(name="kick", description="Éjecter un membre du serveur")
     @commands.has_permissions(kick_members=True)
     async def kick(self, ctx, member: discord.Member, *, reason: str = "Aucune raison précisée"):
         if member == ctx.author:
@@ -177,7 +172,6 @@ class Moderation(commands.Cog):
         if member.top_role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
             return await ctx.reply("Pas le droit de kick plus haut ou égal que toi.")
 
-        # MP au membre
         try:
             dm_embed = discord.Embed(
                 title="👢 Tu as été éjecté",
@@ -199,13 +193,8 @@ class Moderation(commands.Cog):
 
         await ctx.reply(f"👢 {member.mention} a été ejecté(e) de la place.\n📝 Raison : {reason}")
 
-    @commands.hybrid_command(name="kick")
-    @commands.has_permissions(kick_members=True)
-    async def slash_kick(self, ctx, member: discord.Member, *, reason: str = "Aucune raison précisée"):
-        await self.kick(ctx, member, reason=reason)
-
     # --- BAN SYSTEM ---
-    @commands.command(name="ban")
+    @commands.hybrid_command(name="ban", description="Ban un membre")
     @commands.has_permissions(ban_members=True)
     async def ban(self, ctx, member: discord.Member, duration: str = None, *, reason: str = "Aucune raison précisée"):
         if member == ctx.author:
@@ -217,7 +206,6 @@ class Moderation(commands.Cog):
         if duration and not time:
             return await ctx.reply("Format de durée invalide. Ex : 10s / 5mn / 2h / 1j")
 
-        # MP avant le ban
         try:
             dm_embed = discord.Embed(
                 title="🔨 Tu as été banni",
@@ -241,18 +229,12 @@ class Moderation(commands.Cog):
 
         await ctx.reply(f"🔨 {member.mention} a été banni.\n📝 Raison : {reason}" + (f"\n⏱ Durée : {duration}" if time else ""))
 
-        # Unban auto si durée
         if time:
             until = datetime.datetime.utcnow() + time
             self.temp_bans.setdefault(ctx.guild.id, {})[member.id] = until
             save_tempbans(self.temp_bans)
 
-    @commands.hybrid_command(name="ban")
-    @commands.has_permissions(ban_members=True)
-    async def slash_ban(self, ctx, member: discord.Member, duration: str = None, *, reason: str = "Aucune raison précisée"):
-        await self.ban(ctx, member, duration, reason=reason)
-
-    @commands.command(name="unban")
+    @commands.hybrid_command(name="unban", description="Déban un membre")
     @commands.has_permissions(ban_members=True)
     async def unban(self, ctx, user_id: int, *, reason: str = "Aucune raison précisée"):
         user = await self.bot.fetch_user(user_id)
@@ -265,18 +247,12 @@ class Moderation(commands.Cog):
 
         await ctx.reply(f"🔓 {user.mention} a été débanni.\n📝 Raison : {reason}")
 
-    @commands.hybrid_command(name="unban")
-    @commands.has_permissions(ban_members=True)
-    async def slash_unban(self, ctx, user_id: int, *, reason: str = "Aucune raison précisée"):
-        await self.unban(ctx, user_id, reason=reason)
-
     # --- !banf (ban le dernier à avoir parlé dans le salon) ---
     @commands.command(name="banf")
     @commands.has_permissions(ban_members=True)
     async def banf(self, ctx, duration: str = None, *, reason: str = None):
-        """Bannit la dernière personne à avoir parlé dans ce salon. Ex: !banf 1j insulte"""
         await ctx.trigger_typing()
-        messages = [msg async for msg in ctx.channel.history(limit=2)]  # [cmd, dernier msg]
+        messages = [msg async for msg in ctx.channel.history(limit=2)]
         if len(messages) < 2:
             return await ctx.send("Impossible de trouver un message précédent dans ce salon.")
         target_msg = messages[1]
@@ -290,7 +266,6 @@ class Moderation(commands.Cog):
 
         delta = parse_duration(duration) if duration else None
 
-        # MP avant ban
         try:
             guild_name = ctx.guild.name
             txt = f"Vous avez été banni du serveur **{guild_name}**"
@@ -327,7 +302,6 @@ class Moderation(commands.Cog):
     @commands.command(name="banm")
     @commands.has_permissions(ban_members=True)
     async def banm(self, ctx, duration: str = None, *, reason: str = None):
-        """Bannit la dernière personne mentionnée dans ce salon. Ex: !banm 1j insulte"""
         await ctx.trigger_typing()
         async for msg in ctx.channel.history(limit=20):
             if msg.mentions and msg.id != ctx.message.id:
@@ -341,7 +315,6 @@ class Moderation(commands.Cog):
                     return await ctx.send("Tu ne peux pas ban un membre avec un rôle égal ou supérieur au tien.")
                 delta = parse_duration(duration) if duration else None
 
-                # MP avant ban
                 try:
                     guild_name = ctx.guild.name
                     txt = f"Vous avez été banni du serveur **{guild_name}**"
@@ -393,7 +366,6 @@ class Moderation(commands.Cog):
                     pass
             self.temp_bans[guild_id].pop(user_id, None)
             save_tempbans(self.temp_bans)
-        # Clean empty dicts
         for guild_id in list(self.temp_bans.keys()):
             if not self.temp_bans[guild_id]:
                 del self.temp_bans[guild_id]
@@ -433,9 +405,9 @@ class Moderation(commands.Cog):
     def get_warns(self, guild_id, user_id):
         return self.warns.get(str(guild_id), {}).get(str(user_id), [])
 
-    @commands.command(name="warn")
+    @commands.hybrid_command(name="warn", description="Avertir un membre")
     @commands.has_permissions(manage_messages=True)
-    async def warn_prefix(self, ctx, member: discord.Member, *, reason: str):
+    async def warn(self, ctx, member: discord.Member, *, reason: str):
         self.add_warn(ctx.guild.id, member.id, reason, ctx.author.id)
         await ctx.reply(f"⚠️ {member.mention} a été averti pour : {reason}")
 
@@ -447,24 +419,18 @@ class Moderation(commands.Cog):
         except Exception:
             pass
 
-    @app_commands.command(name="warn", description="Avertir un membre")
-    @app_commands.describe(member="Membre à avertir", reason="Raison de l'avertissement")
-    async def warn_slash(self, interaction: discord.Interaction, member: discord.Member, reason: str):
-        ctx = await self.bot.get_context(interaction)
-        await self.warn_prefix(ctx, member, reason=reason)
-
-    @app_commands.command(name="warns", description="Voir la liste des avertissements")
-    @app_commands.describe(member="Membre à vérifier")
-    async def warns(self, interaction: discord.Interaction, member: discord.Member):
-        warns = self.get_warns(interaction.guild.id, member.id)
+    @commands.hybrid_command(name="warns", description="Voir la liste des avertissements")
+    @commands.has_permissions(manage_messages=True)
+    async def warns(self, ctx, member: discord.Member):
+        warns = self.get_warns(ctx.guild.id, member.id)
         embed = discord.Embed(title=f"📄 Liste d'avertissements de {member} ({len(warns)})", color=0xFFA500)
         for idx, w in enumerate(warns):
             warner = await self.bot.fetch_user(int(w["warner"]))
             date = datetime.datetime.fromisoformat(w["date"]).strftime("%d/%m/%Y")
             embed.add_field(name=f"{idx+1}. {date}", value=f"**Raison :** {w['reason']}\n**Par :** {warner.mention} ({warner.name} | {warner.id})", inline=False)
 
-        view = WarnsView(self, interaction.guild.id, member.id)
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        view = WarnsView(self, ctx.guild.id, member.id)
+        await ctx.send(embed=embed, view=view, ephemeral=True)
 
 class WarnsView(discord.ui.View):
     def __init__(self, cog, guild_id, user_id):

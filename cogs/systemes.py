@@ -10,8 +10,9 @@ ROLE_EN = 1381246992675770379
 ROLE_TEMP = 1381246686738776234
 PING_CHANNEL = 1381115963029585920
 
-# Fichier pour sauvegarder l’ID du message
+# Fichiers pour la persistance
 LANG_MSG_FILE = "lang_message_id.txt"
+REGLE_MSG_FILE = "regle_message_id.txt"
 
 # Pour garder les sélections en attente de confirmation
 pending_choices = {}
@@ -24,7 +25,6 @@ ROLE_VETERAN = 1381109887857201182
 ROLE_TRYHARD = 1381110108154626131
 ROLE_SELECTION_RANK = 1381243253332119672
 
-# Dictionnaire des choix
 RANK_OPTIONS = {
     "1-5": ROLE_RECRUIT,
     "6-10": ROLE_INEXPERIENCED,
@@ -82,7 +82,6 @@ class LangueSelectView(discord.ui.View):
                 "Ok, https://discordapp.com/channels/1381099938225852436/1381115963029585920", ephemeral=True
             )
 
-
 class VGameChoice(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -99,7 +98,6 @@ class VGameChoice(discord.ui.View):
         user = interaction.user
         guild = interaction.guild
 
-        # Ajout du rôle choisi
         role = guild.get_role(role_id)
         if role:
             try:
@@ -108,7 +106,6 @@ class VGameChoice(discord.ui.View):
                 await interaction.response.send_message("Je n'ai pas la permission d'ajouter ce rôle.", ephemeral=True)
                 return
 
-        # Retrait rôle choix V-game
         role_select = guild.get_role(ROLE_SELECT_VGAME)
         if role_select and role_select in user.roles:
             try:
@@ -116,7 +113,6 @@ class VGameChoice(discord.ui.View):
             except discord.Forbidden:
                 pass
 
-        # Ajout accès partiel
         role_partiel = guild.get_role(ROLE_PARTIEL)
         if role_partiel:
             try:
@@ -124,7 +120,6 @@ class VGameChoice(discord.ui.View):
             except discord.Forbidden:
                 pass
 
-        # Ping dans le bon salon
         ping_channel = guild.get_channel(PING_VGAME)
         if ping_channel:
             try:
@@ -138,7 +133,6 @@ class VGameChoice(discord.ui.View):
                 "Ok, https://discordapp.com/channels/1381099938225852436/1381247554129236039", ephemeral=True
             )
 
-
 class VGameGate(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -148,13 +142,11 @@ class VGameGate(discord.ui.View):
         user = interaction.user
         guild = interaction.guild
 
-        # Check langue
         fr_role = guild.get_role(ROLE_FR)
         en_role = guild.get_role(ROLE_EN)
         is_fr = fr_role in user.roles if fr_role else False
         is_en = en_role in user.roles if en_role else False
 
-        # Texte en fonction de la langue
         if is_fr:
             desc = "Quelle est ta version du jeu ?"
         elif is_en:
@@ -168,7 +160,6 @@ class VGameGate(discord.ui.View):
             color=discord.Color.dark_green()
         )
         await interaction.response.send_message(embed=embed, view=VGameChoice(), ephemeral=True)
-
 
 class RankSelect(discord.ui.Select):
     def __init__(self):
@@ -190,7 +181,6 @@ class RankSelect(discord.ui.Select):
         choice = self.values[0]
         pending_choices[user.id] = choice
 
-        # Message de confirmation
         fr = discord.utils.get(user.roles, id=ROLE_FR)
         en = discord.utils.get(user.roles, id=ROLE_EN)
 
@@ -203,7 +193,6 @@ class RankSelect(discord.ui.Select):
 
         embed = discord.Embed(title="Confirmation", description=desc, color=discord.Color.orange())
         await interaction.response.send_message(embed=embed, view=ConfirmRank(), ephemeral=True)
-
 
 class ConfirmRank(discord.ui.View):
     def __init__(self):
@@ -236,7 +225,7 @@ class ConfirmRank(discord.ui.View):
             except discord.Forbidden:
                 pass
 
-        final_role = guild.get_role(1381108674449117234)  # rôle Membre
+        final_role = guild.get_role(1381108674449117234)
         if final_role:
             try:
                 await user.add_roles(final_role)
@@ -261,7 +250,6 @@ class ConfirmRank(discord.ui.View):
 
         if not interaction.response.is_done():
             await interaction.response.edit_message(content="❌ Choix annulé.", embed=None, view=None)
-
 
 class RankGate(discord.ui.View):
     def __init__(self):
@@ -289,7 +277,6 @@ class RankGate(discord.ui.View):
         view = discord.ui.View(timeout=None)
         view.add_item(RankSelect())
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
 
 class ReglementView(discord.ui.View):
     def __init__(self):
@@ -328,13 +315,11 @@ class ReglementView(discord.ui.View):
         embed.set_footer(text="The Staff BO2 FR", icon_url=icon_url)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-
 class DynamiRoleView(View):
     def __init__(self):
         super().__init__(timeout=None)
         self.roles_ids = [1381111113793667092, 1381115349977530409]
         self.add_item(DynamiButton(label=" ", emoji="➕", custom_id="add_dynamic"))
-
 
 class DynamiButton(Button):
     def __init__(self, label, emoji, custom_id):
@@ -384,7 +369,7 @@ class Systemes(commands.Cog):
         self.bot.add_view(ReglementView())
         print("Systemes prêt.")
 
-        # Réassocier la view au message si fichier ID existe
+        # Restaure la view du message de langue si besoin
         if os.path.exists(LANG_MSG_FILE):
             try:
                 with open(LANG_MSG_FILE, "r") as f:
@@ -395,9 +380,24 @@ class Systemes(commands.Cog):
                         if channel:
                             msg = await channel.fetch_message(message_id)
                             await msg.edit(view=LangueSelectView())
-                            print("✅ View persistante restaurée.")
+                            print("✅ View persistante (langue) restaurée.")
             except Exception as e:
-                print(f"❌ Impossible de restaurer la view : {e}")
+                print(f"❌ Impossible de restaurer la view langue : {e}")
+
+        # Restaure la view du message de règlement si besoin
+        if os.path.exists(REGLE_MSG_FILE):
+            try:
+                with open(REGLE_MSG_FILE, "r") as f:
+                    line = f.read().strip()
+                    if "-" in line:
+                        channel_id, message_id = map(int, line.split("-"))
+                        channel = self.bot.get_channel(channel_id)
+                        if channel:
+                            msg = await channel.fetch_message(message_id)
+                            await msg.edit(view=ReglementView())
+                            print("✅ View persistante (règlement) restaurée.")
+            except Exception as e:
+                print(f"❌ Impossible de restaurer la view règlement : {e}")
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
@@ -442,7 +442,6 @@ class Systemes(commands.Cog):
             color=discord.Color.blurple()
         )
         msg = await ctx.send(embed=embed, view=LangueSelectView())
-        # Sauvegarde de l'ID du message et channel pour la persist
         with open(LANG_MSG_FILE, "w") as f:
             f.write(f"{ctx.channel.id}-{msg.id}")
 
@@ -495,7 +494,9 @@ class Systemes(commands.Cog):
             color=0x1e1f22
         )
         embed.set_footer(text="Le Staff BO2 FR", icon_url=icon_url)
-        await ctx.send(embed=embed, view=ReglementView())
+        msg = await ctx.send(embed=embed, view=ReglementView())
+        with open(REGLE_MSG_FILE, "w") as f:
+            f.write(f"{ctx.channel.id}-{msg.id}")
 
     @commands.command(name="dynameprof_role")
     async def dynameprof_role(self, ctx):
@@ -505,7 +506,7 @@ class Systemes(commands.Cog):
                 "**FR 🇫🇷** : Rendre votre profil plus dynamique en réorganisant vos rôles\n"
                 "**EN 🇬🇧** : Make your profile more dynamic by reorganizing your roles"
             ),
-            color=0xFF6600  # Orange proche du logo CoD
+            color=0xFF6600
         )
         view = DynamiRoleView()
         await ctx.send(embed=embed, view=view)
