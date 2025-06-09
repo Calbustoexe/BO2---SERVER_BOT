@@ -1,5 +1,7 @@
 import discord
 from discord.ext import commands
+from discord.ui import View, Button
+import json
 import os
 
 # IDs fixes
@@ -182,7 +184,7 @@ class ConfirmRank(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=30)
 
-    @discord.ui.button(label="✅ Confirmer", style=discord.ButtonStyle.success, custom_id="rank_confirm")
+    @discord.ui.button(label="Confirmer", style=discord.ButtonStyle.success, custom_id="rank_confirm")
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         user = interaction.user
         guild = interaction.guild
@@ -212,7 +214,7 @@ class ConfirmRank(discord.ui.View):
 
         await interaction.response.edit_message(content="✅", embed=None, view=None)
 
-    @discord.ui.button(label="❌ Annuler", style=discord.ButtonStyle.danger, custom_id="rank_cancel")
+    @discord.ui.button(label="Annuler", style=discord.ButtonStyle.danger, custom_id="rank_cancel")
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         user = interaction.user
         if user.id in pending_choices:
@@ -397,6 +399,74 @@ class Systemes(commands.Cog):
         )
         embed.set_footer(text="Le Staff BO2 FR", icon_url=ctx.guild.icon.url if ctx.guild.icon else discord.Embed.Empty)
         await ctx.send(embed=embed, view=ReglementView())
+
+    @commands.command(name="dynameprof_role")
+    async def dynameprof_role(self, ctx):
+        embed = discord.Embed(
+            title="Profils Dynamiques",
+            description=(
+                "**FR 🇫🇷** : Rendre votre profil plus dynamique en réorganisant vos rôles\n"
+                "**EN 🇬🇧** : Make your profile more dynamic by reorganizing your roles"
+            ),
+            color=0xFF6600  # Orange proche du logo CoD
+        )
+
+        view = DynamiRoleView()
+        await ctx.send(embed=embed, view=view)
+
+class DynamiRoleView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.roles_ids = [1381111113793667092, 1381115349977530409]
+
+        self.add_item(DynamiButton(label="+", emoji="➕", custom_id="add_dynamic"))
+
+class DynamiButton(Button):
+    def __init__(self, label, emoji, custom_id):
+        super().__init__(label=label, emoji=emoji, style=discord.ButtonStyle.primary, custom_id=custom_id)
+
+    async def callback(self, interaction: discord.Interaction):
+        member = interaction.user
+        roles = [interaction.guild.get_role(rid) for rid in [1381111113793667092, 1381115349977530409]]
+        has_roles = all(role in member.roles for role in roles)
+
+        if has_roles:
+            view = View()
+            view.add_item(Button(label="Rendre normale", style=discord.ButtonStyle.danger, custom_id="reset_dynamic"))
+            view.add_item(Button(label="Laisser", style=discord.ButtonStyle.secondary, custom_id="leave_dynamic"))
+
+            await interaction.response.send_message(
+                content=(
+                    "**FR 🇫🇷** : Ton profil a déjà été dynamisé, veux-tu le rendre normal ?\n"
+                    "**EN 🇬🇧** : Your profile is already dynamic. Do you want to revert it?"
+                ),
+                ephemeral=True,
+                view=view
+            )
+        else:
+            for role in roles:
+                if role:
+                    await member.add_roles(role)
+            await interaction.response.send_message(
+                "**FR 🇫🇷** : Ton profil a été dynamisé.\n**EN 🇬🇧** : Your profile has been made dynamic.", ephemeral=True
+            )
+
+@commands.Cog.listener()
+async def on_interaction(interaction: discord.Interaction):
+    if interaction.type == discord.InteractionType.component:
+        cid = interaction.data.get("custom_id")
+        member = interaction.user
+        guild = interaction.guild
+
+        if cid == "reset_dynamic":
+            for role_id in [1381111113793667092, 1381115349977530409]:
+                role = guild.get_role(role_id)
+                if role in member.roles:
+                    await member.remove_roles(role)
+            await interaction.response.edit_message(content="ok", view=None)
+
+        elif cid == "leave_dynamic":
+            await interaction.response.edit_message(content="ok", view=None)
 
 async def setup(bot):
     await bot.add_cog(Systemes(bot))

@@ -12,6 +12,7 @@ bot = commands.Bot(command_prefix="!!", intents=intents)
 
 @bot.event
 async def on_ready():
+    await bot.change_presence(activity=discord.Game(name="Call Of Duty: Black Ops II"))
     print(f"Connecté en tant que {bot.user.name}")
     # Sync des commandes slash si tu veux (commenter si inutile)
     try:
