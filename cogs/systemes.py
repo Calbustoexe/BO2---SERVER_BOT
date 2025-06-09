@@ -56,13 +56,24 @@ class LangueSelectView(discord.ui.View):
         guild = interaction.guild
         role = guild.get_role(role_id)
         temp = guild.get_role(ROLE_TEMP)
+        role_select_vgame = guild.get_role(ROLE_SELECT_VGAME)  # Ajout du rôle vgame
 
+        # Ajoute le rôle de langue choisi
         if role:
             try:
                 await user.add_roles(role)
             except discord.Forbidden:
                 await interaction.response.send_message("Je n'ai pas la permission d'ajouter ce rôle.", ephemeral=True)
                 return
+
+        # Ajoute systématiquement le rôle vgame
+        if role_select_vgame and role_select_vgame not in user.roles:
+            try:
+                await user.add_roles(role_select_vgame)
+            except discord.Forbidden:
+                pass
+
+        # Retire le rôle temporaire si présent
         if temp and temp in user.roles:
             try:
                 await user.remove_roles(temp)
@@ -378,9 +389,12 @@ class Systemes(commands.Cog):
                         channel_id, message_id = map(int, line.split("-"))
                         channel = self.bot.get_channel(channel_id)
                         if channel:
-                            msg = await channel.fetch_message(message_id)
-                            await msg.edit(view=LangueSelectView())
-                            print("✅ View persistante (langue) restaurée.")
+                            try:
+                                msg = await channel.fetch_message(message_id)
+                                await msg.edit(view=LangueSelectView())
+                                print("✅ View persistante (langue) restaurée.")
+                            except discord.NotFound:
+                                print("❌ Ancien message de langue introuvable, il faut relancer sendlangue.")
             except Exception as e:
                 print(f"❌ Impossible de restaurer la view langue : {e}")
 
@@ -393,9 +407,12 @@ class Systemes(commands.Cog):
                         channel_id, message_id = map(int, line.split("-"))
                         channel = self.bot.get_channel(channel_id)
                         if channel:
-                            msg = await channel.fetch_message(message_id)
-                            await msg.edit(view=ReglementView())
-                            print("✅ View persistante (règlement) restaurée.")
+                            try:
+                                msg = await channel.fetch_message(message_id)
+                                await msg.edit(view=ReglementView())
+                                print("✅ View persistante (règlement) restaurée.")
+                            except discord.NotFound:
+                                print("❌ Ancien message règlement introuvable, il faut relancer panel_regle.")
             except Exception as e:
                 print(f"❌ Impossible de restaurer la view règlement : {e}")
 
@@ -442,6 +459,7 @@ class Systemes(commands.Cog):
             color=discord.Color.blurple()
         )
         msg = await ctx.send(embed=embed, view=LangueSelectView())
+        # Met à jour le fichier de persistance à chaque envoi du message
         with open(LANG_MSG_FILE, "w") as f:
             f.write(f"{ctx.channel.id}-{msg.id}")
 
@@ -495,6 +513,7 @@ class Systemes(commands.Cog):
         )
         embed.set_footer(text="Le Staff BO2 FR", icon_url=icon_url)
         msg = await ctx.send(embed=embed, view=ReglementView())
+        # Met à jour le fichier de persistance à chaque envoi du message
         with open(REGLE_MSG_FILE, "w") as f:
             f.write(f"{ctx.channel.id}-{msg.id}")
 
