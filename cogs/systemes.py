@@ -333,7 +333,7 @@ class DynamiRoleView(View):
     def __init__(self):
         super().__init__(timeout=None)
         self.roles_ids = [1381111113793667092, 1381115349977530409]
-        self.add_item(DynamiButton(label="+", emoji="➕", custom_id="add_dynamic"))
+        self.add_item(DynamiButton(label=" ", emoji="➕", custom_id="add_dynamic"))
 
 
 class DynamiButton(Button):
@@ -428,11 +428,11 @@ class Systemes(commands.Cog):
                         except discord.Forbidden:
                             pass
                 if not interaction.response.is_done():
-                    await interaction.response.edit_message(content="ok", view=None)
+                    await interaction.response.edit_message(content="fait, regarde comment ton profile est plus beau :D", view=None)
 
             elif cid == "leave_dynamic":
                 if not interaction.response.is_done():
-                    await interaction.response.edit_message(content="ok", view=None)
+                    await interaction.response.edit_message(content="Ok.", view=None)
 
     @commands.command()
     async def sendlangue(self, ctx):
