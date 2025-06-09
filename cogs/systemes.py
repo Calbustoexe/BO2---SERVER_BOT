@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from discord.ui import View, Button
+from discord.ui import View, Button, Select
 import json
 import os
 
@@ -12,6 +12,32 @@ PING_CHANNEL = 1381115963029585920
 
 # Fichier pour sauvegarder l’ID du message
 LANG_MSG_FILE = "lang_message_id.txt"
+
+# Pour garder les sélections en attente de confirmation
+pending_choices = {}
+
+# Rôles en fonction des niveaux
+ROLE_RECRUIT = 1381109216835797072
+ROLE_INEXPERIENCED = 1381109345286095000
+ROLE_ROOKIE = 1381109396515459202
+ROLE_VETERAN = 1381109887857201182
+ROLE_TRYHARD = 1381110108154626131
+ROLE_SELECTION_RANK = 1381243253332119672
+
+# Dictionnaire des choix
+RANK_OPTIONS = {
+    "1-5": ROLE_RECRUIT,
+    "6-10": ROLE_INEXPERIENCED,
+    "11-15": ROLE_ROOKIE,
+    "16-20": ROLE_VETERAN,
+    "21+": ROLE_TRYHARD
+}
+
+ROLE_CRACK = 1381115255035527198
+ROLE_LEGIT = 1381115472195354774
+ROLE_SELECT_VGAME = 1381242962528309258
+ROLE_PARTIEL = 1381243253332119672
+PING_VGAME = 1381247554129236039
 
 class LangueSelectView(discord.ui.View):
     def __init__(self):
@@ -32,9 +58,16 @@ class LangueSelectView(discord.ui.View):
         temp = guild.get_role(ROLE_TEMP)
 
         if role:
-            await user.add_roles(role)
+            try:
+                await user.add_roles(role)
+            except discord.Forbidden:
+                await interaction.response.send_message("Je n'ai pas la permission d'ajouter ce rôle.", ephemeral=True)
+                return
         if temp and temp in user.roles:
-            await user.remove_roles(temp)
+            try:
+                await user.remove_roles(temp)
+            except discord.Forbidden:
+                pass
 
         channel = guild.get_channel(PING_CHANNEL)
         if channel:
@@ -44,13 +77,11 @@ class LangueSelectView(discord.ui.View):
             except Exception as e:
                 print(f"Erreur ping : {e}")
 
-        await interaction.response.send_message("Ok, https://discordapp.com/channels/1381099938225852436/1381115963029585920", ephemeral=True)
+        if not interaction.response.is_done():
+            await interaction.response.send_message(
+                "Ok, https://discordapp.com/channels/1381099938225852436/1381115963029585920", ephemeral=True
+            )
 
-ROLE_CRACK = 1381115255035527198
-ROLE_LEGIT = 1381115472195354774
-ROLE_SELECT_VGAME = 1381242962528309258
-ROLE_PARTIEL = 1381243253332119672
-PING_VGAME = 1381247554129236039
 
 class VGameChoice(discord.ui.View):
     def __init__(self):
@@ -71,17 +102,27 @@ class VGameChoice(discord.ui.View):
         # Ajout du rôle choisi
         role = guild.get_role(role_id)
         if role:
-            await user.add_roles(role)
+            try:
+                await user.add_roles(role)
+            except discord.Forbidden:
+                await interaction.response.send_message("Je n'ai pas la permission d'ajouter ce rôle.", ephemeral=True)
+                return
 
         # Retrait rôle choix V-game
         role_select = guild.get_role(ROLE_SELECT_VGAME)
         if role_select and role_select in user.roles:
-            await user.remove_roles(role_select)
+            try:
+                await user.remove_roles(role_select)
+            except discord.Forbidden:
+                pass
 
         # Ajout accès partiel
         role_partiel = guild.get_role(ROLE_PARTIEL)
         if role_partiel:
-            await user.add_roles(role_partiel)
+            try:
+                await user.add_roles(role_partiel)
+            except discord.Forbidden:
+                pass
 
         # Ping dans le bon salon
         ping_channel = guild.get_channel(PING_VGAME)
@@ -92,7 +133,10 @@ class VGameChoice(discord.ui.View):
             except Exception as e:
                 print(f"Erreur ping VGame : {e}")
 
-        await interaction.response.send_message("Ok, https://discordapp.com/channels/1381099938225852436/1381247554129236039", ephemeral=True)
+        if not interaction.response.is_done():
+            await interaction.response.send_message(
+                "Ok, https://discordapp.com/channels/1381099938225852436/1381247554129236039", ephemeral=True
+            )
 
 
 class VGameGate(discord.ui.View):
@@ -107,8 +151,8 @@ class VGameGate(discord.ui.View):
         # Check langue
         fr_role = guild.get_role(ROLE_FR)
         en_role = guild.get_role(ROLE_EN)
-        is_fr = fr_role in user.roles
-        is_en = en_role in user.roles
+        is_fr = fr_role in user.roles if fr_role else False
+        is_en = en_role in user.roles if en_role else False
 
         # Texte en fonction de la langue
         if is_fr:
@@ -125,26 +169,6 @@ class VGameGate(discord.ui.View):
         )
         await interaction.response.send_message(embed=embed, view=VGameChoice(), ephemeral=True)
 
-# Rôles en fonction des niveaux
-ROLE_RECRUIT = 1381109216835797072
-ROLE_INEXPERIENCED = 1381109345286095000
-ROLE_ROOKIE = 1381109396515459202
-ROLE_VETERAN = 1381109887857201182
-ROLE_TRYHARD = 1381110108154626131
-
-ROLE_SELECTION_RANK = 1381243253332119672
-
-# Dictionnaire des choix
-RANK_OPTIONS = {
-    "1-5": ROLE_RECRUIT,
-    "6-10": ROLE_INEXPERIENCED,
-    "11-15": ROLE_ROOKIE,
-    "16-20": ROLE_VETERAN,
-    "21+": ROLE_TRYHARD
-}
-
-# Pour garder les sélections en attente de confirmation
-pending_choices = {}
 
 class RankSelect(discord.ui.Select):
     def __init__(self):
@@ -180,11 +204,12 @@ class RankSelect(discord.ui.Select):
         embed = discord.Embed(title="Confirmation", description=desc, color=discord.Color.orange())
         await interaction.response.send_message(embed=embed, view=ConfirmRank(), ephemeral=True)
 
+
 class ConfirmRank(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=30)
 
-    @discord.ui.button(label="Confirmer", style=discord.ButtonStyle.success, custom_id="rank_confirm")
+    @discord.ui.button(label="✅ Confirmer", style=discord.ButtonStyle.success, custom_id="rank_confirm")
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         user = interaction.user
         guild = interaction.guild
@@ -198,21 +223,35 @@ class ConfirmRank(discord.ui.View):
         if role_id:
             role = guild.get_role(role_id)
             if role:
-                await user.add_roles(role)
+                try:
+                    await user.add_roles(role)
+                except discord.Forbidden:
+                    await interaction.response.send_message("Je n'ai pas la permission d'ajouter ce rôle.", ephemeral=True)
+                    return
 
         select_rank = guild.get_role(ROLE_SELECTION_RANK)
         if select_rank and select_rank in user.roles:
-            await user.remove_roles(select_rank)
+            try:
+                await user.remove_roles(select_rank)
+            except discord.Forbidden:
+                pass
 
         final_role = guild.get_role(1381108674449117234)  # rôle Membre
         if final_role:
-            await user.add_roles(final_role)
-        
+            try:
+                await user.add_roles(final_role)
+            except discord.Forbidden:
+                pass
+
         verif_role = guild.get_role(1381241425219551334)
         if verif_role and verif_role in user.roles:
-            await user.remove_roles(verif_role)
+            try:
+                await user.remove_roles(verif_role)
+            except discord.Forbidden:
+                pass
 
-        await interaction.response.edit_message(content="✅", embed=None, view=None)
+        if not interaction.response.is_done():
+            await interaction.response.edit_message(content="✅", embed=None, view=None)
 
     @discord.ui.button(label="Annuler", style=discord.ButtonStyle.danger, custom_id="rank_cancel")
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -220,7 +259,9 @@ class ConfirmRank(discord.ui.View):
         if user.id in pending_choices:
             pending_choices.pop(user.id)
 
-        await interaction.response.edit_message(content="❌ Choix annulé.", embed=None, view=None)
+        if not interaction.response.is_done():
+            await interaction.response.edit_message(content="❌ Choix annulé.", embed=None, view=None)
+
 
 class RankGate(discord.ui.View):
     def __init__(self):
@@ -249,17 +290,98 @@ class RankGate(discord.ui.View):
         view.add_item(RankSelect())
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
+
+class ReglementView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="English version", style=discord.ButtonStyle.secondary, custom_id="regle_english")
+    async def english_version(self, interaction: discord.Interaction, button: discord.ui.Button):
+        icon_url = interaction.guild.icon.url if interaction.guild and interaction.guild.icon else None
+        embed = discord.Embed(
+            title="📜 Server Rules",
+            description="""
+**I. Mutual Respect**
+- Treat others the way you'd like to be treated. No toxic behavior, harassment, or gratuitous insults outside of humor.
+- Hate speech, conspiracy theories, religious proclamations, personal issues — not here.
+
+**II. No inappropriate content**
+- Anything NSFW, shocking, hateful or illegal is not welcome. Keep the trafficking in-game.
+
+**III. No spam, ads or flood**
+- Ads (outside dedicated channels) are not allowed.
+
+**IV. Respect channel themes**
+- Every channel has its purpose, check before posting.
+- Most have descriptions — read them. Tickets are there if anything’s unclear.
+
+**V. Staff has the final say**
+- Staff decisions are final. Don’t throw insults or hate. Got an issue? Use a ticket to reach Admins.
+
+**VI. Profile**
+- Explicit profile = risk of being quarantined on the server.
+            
+**VII.** : don't be idiot
+            """,
+            color=0x1e1f22
+        )
+        embed.set_footer(text="The Staff BO2 FR", icon_url=icon_url)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+class DynamiRoleView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.roles_ids = [1381111113793667092, 1381115349977530409]
+        self.add_item(DynamiButton(label="+", emoji="➕", custom_id="add_dynamic"))
+
+
+class DynamiButton(Button):
+    def __init__(self, label, emoji, custom_id):
+        super().__init__(label=label, emoji=emoji, style=discord.ButtonStyle.primary, custom_id=custom_id)
+
+    async def callback(self, interaction: discord.Interaction):
+        member = interaction.user
+        guild = interaction.guild
+        roles = [guild.get_role(rid) for rid in [1381111113793667092, 1381115349977530409]]
+        has_roles = all(role in member.roles for role in roles if role)
+
+        if has_roles:
+            view = View()
+            view.add_item(Button(label="Rendre normale", style=discord.ButtonStyle.danger, custom_id="reset_dynamic"))
+            view.add_item(Button(label="Laisser", style=discord.ButtonStyle.secondary, custom_id="leave_dynamic"))
+            await interaction.response.send_message(
+                content=(
+                    "**FR 🇫🇷** : Ton profil a déjà été dynamisé, veux-tu le rendre normal ?\n"
+                    "**EN 🇬🇧** : Your profile is already dynamic. Do you want to revert it?"
+                ),
+                ephemeral=True,
+                view=view
+            )
+        else:
+            for role in roles:
+                if role and role not in member.roles:
+                    try:
+                        await member.add_roles(role)
+                    except discord.Forbidden:
+                        await interaction.response.send_message("Permission refusée pour ajouter un rôle.", ephemeral=True)
+                        return
+            await interaction.response.send_message(
+                "**FR 🇫🇷** : Ton profil a été dynamisé.\n**EN 🇬🇧** : Your profile has been made dynamic.", ephemeral=True
+            )
+
 class Systemes(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     @commands.Cog.listener()
     async def on_ready(self):
+        # Ajout des views persistantes
         self.bot.add_view(LangueSelectView())
         self.bot.add_view(VGameGate())
         self.bot.add_view(VGameChoice())
         self.bot.add_view(RankGate())
-
+        self.bot.add_view(ReglementView())
         print("Systemes prêt.")
 
         # Réassocier la view au message si fichier ID existe
@@ -290,6 +412,28 @@ class Systemes(commands.Cog):
                 except Exception as e:
                     print(f"Erreur en ajoutant {role.name} : {e}")
 
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        if interaction.type == discord.InteractionType.component:
+            cid = interaction.data.get("custom_id")
+            member = interaction.user
+            guild = interaction.guild
+
+            if cid == "reset_dynamic":
+                for role_id in [1381111113793667092, 1381115349977530409]:
+                    role = guild.get_role(role_id)
+                    if role and role in member.roles:
+                        try:
+                            await member.remove_roles(role)
+                        except discord.Forbidden:
+                            pass
+                if not interaction.response.is_done():
+                    await interaction.response.edit_message(content="ok", view=None)
+
+            elif cid == "leave_dynamic":
+                if not interaction.response.is_done():
+                    await interaction.response.edit_message(content="ok", view=None)
+
     @commands.command()
     async def sendlangue(self, ctx):
         embed = discord.Embed(
@@ -298,7 +442,6 @@ class Systemes(commands.Cog):
             color=discord.Color.blurple()
         )
         msg = await ctx.send(embed=embed, view=LangueSelectView())
-
         # Sauvegarde de l'ID du message et channel pour la persist
         with open(LANG_MSG_FILE, "w") as f:
             f.write(f"{ctx.channel.id}-{msg.id}")
@@ -306,12 +449,11 @@ class Systemes(commands.Cog):
     @commands.command()
     async def sendvgame(self, ctx):
         embed = discord.Embed(
-            title="Crack OU legist ?",
+            title="Crack OU legit ?",
             description="Clique pour continuer. Nous acceptons sans soucis les cracks :D",
             color=discord.Color.greyple()
         )
         await ctx.send(embed=embed, view=VGameGate())
-
 
     @commands.command()
     async def sendrank(self, ctx):
@@ -322,54 +464,9 @@ class Systemes(commands.Cog):
         )
         await ctx.send(embed=embed, view=RankGate())
 
-
-class ReglementView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="English version", style=discord.ButtonStyle.secondary, custom_id="regle_english")
-    async def english_version(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = discord.Embed(
-            title="📜 Server Rules",
-            description="""
-**I. Mutual Respect**
-- Treat others the way you'd like to be treated. No toxic behavior, harassment, or gratuitous insults outside of humor.
-- Hate speech, conspiracy theories, religious proclamations, personal issues — not here.
-
-**II. No inappropriate content**
-- Anything NSFW, shocking, hateful or illegal is not welcome. Keep the trafficking in-game.
-
-**III. No spam, ads or flood**
-- Ads (outside dedicated channels) are not allowed.
-
-**IV. Respect channel themes**
-- Every channel has its purpose, check before posting.
-- Most have descriptions — read them. Tickets are there if anything’s unclear.
-
-**V. Staff has the final say**
-- Staff decisions are final. Don’t throw insults or hate. Got an issue? Use a ticket to reach Admins.
-
-**VI. Profile**
-- Explicit profile = risk of being quarantined on the server.
-            
-**VII.** : don't be idiot
-            """,
-            color=0x1e1f22
-        )
-        embed.set_footer(text="The Staff BO2 FR", icon_url=interaction.guild.icon.url if interaction.guild.icon else discord.Embed.Empty)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-class Systemes(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
-
-    @commands.Cog.listener()
-    async def on_ready(self):
-        self.bot.add_view(ReglementView())
-        # autres views existantes ici...
-
     @commands.command()
     async def panel_regle(self, ctx):
+        icon_url = ctx.guild.icon.url if ctx.guild and ctx.guild.icon else None
         embed = discord.Embed(
             title="📜 Règlement du serveur",
             description="""
@@ -397,7 +494,7 @@ class Systemes(commands.Cog):
             """,
             color=0x1e1f22
         )
-        embed.set_footer(text="Le Staff BO2 FR", icon_url=ctx.guild.icon.url if ctx.guild.icon else discord.Embed.Empty)
+        embed.set_footer(text="Le Staff BO2 FR", icon_url=icon_url)
         await ctx.send(embed=embed, view=ReglementView())
 
     @commands.command(name="dynameprof_role")
@@ -410,63 +507,8 @@ class Systemes(commands.Cog):
             ),
             color=0xFF6600  # Orange proche du logo CoD
         )
-
         view = DynamiRoleView()
         await ctx.send(embed=embed, view=view)
-
-class DynamiRoleView(View):
-    def __init__(self):
-        super().__init__(timeout=None)
-        self.roles_ids = [1381111113793667092, 1381115349977530409]
-
-        self.add_item(DynamiButton(label="+", emoji="➕", custom_id="add_dynamic"))
-
-class DynamiButton(Button):
-    def __init__(self, label, emoji, custom_id):
-        super().__init__(label=label, emoji=emoji, style=discord.ButtonStyle.primary, custom_id=custom_id)
-
-    async def callback(self, interaction: discord.Interaction):
-        member = interaction.user
-        roles = [interaction.guild.get_role(rid) for rid in [1381111113793667092, 1381115349977530409]]
-        has_roles = all(role in member.roles for role in roles)
-
-        if has_roles:
-            view = View()
-            view.add_item(Button(label="Rendre normale", style=discord.ButtonStyle.danger, custom_id="reset_dynamic"))
-            view.add_item(Button(label="Laisser", style=discord.ButtonStyle.secondary, custom_id="leave_dynamic"))
-
-            await interaction.response.send_message(
-                content=(
-                    "**FR 🇫🇷** : Ton profil a déjà été dynamisé, veux-tu le rendre normal ?\n"
-                    "**EN 🇬🇧** : Your profile is already dynamic. Do you want to revert it?"
-                ),
-                ephemeral=True,
-                view=view
-            )
-        else:
-            for role in roles:
-                if role:
-                    await member.add_roles(role)
-            await interaction.response.send_message(
-                "**FR 🇫🇷** : Ton profil a été dynamisé.\n**EN 🇬🇧** : Your profile has been made dynamic.", ephemeral=True
-            )
-
-@commands.Cog.listener()
-async def on_interaction(interaction: discord.Interaction):
-    if interaction.type == discord.InteractionType.component:
-        cid = interaction.data.get("custom_id")
-        member = interaction.user
-        guild = interaction.guild
-
-        if cid == "reset_dynamic":
-            for role_id in [1381111113793667092, 1381115349977530409]:
-                role = guild.get_role(role_id)
-                if role in member.roles:
-                    await member.remove_roles(role)
-            await interaction.response.edit_message(content="ok", view=None)
-
-        elif cid == "leave_dynamic":
-            await interaction.response.edit_message(content="ok", view=None)
 
 async def setup(bot):
     await bot.add_cog(Systemes(bot))
