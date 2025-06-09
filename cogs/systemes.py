@@ -401,7 +401,7 @@ class Systemes(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
-        role_ids = [1381241425219551334, 1381242962528309258]
+        role_ids = [1381241425219551334, 1381246686738776234]
         for role_id in role_ids:
             role = member.guild.get_role(role_id)
             if role:

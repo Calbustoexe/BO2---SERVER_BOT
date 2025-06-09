@@ -174,7 +174,7 @@ class Moderation(commands.Cog):
 
         try:
             dm_embed = discord.Embed(
-                title="👢 Tu as été éjecté",
+                title="Tu as été éjecté",
                 description=f"Tu as été kick du serveur **{ctx.guild.name}**.",
                 color=0xFF8000
             )
@@ -191,7 +191,7 @@ class Moderation(commands.Cog):
         except Exception as e:
             return await ctx.reply(f"Erreur : {e}")
 
-        await ctx.reply(f"👢 {member.mention} a été ejecté(e) de la place.\n📝 Raison : {reason}")
+        await ctx.reply(f"{member.mention} a été ejecté(e) de la place.\n📝 Raison : {reason}")
 
     # --- BAN SYSTEM ---
     @commands.hybrid_command(name="ban", description="Ban un membre")
@@ -251,52 +251,52 @@ class Moderation(commands.Cog):
     @commands.command(name="banf")
     @commands.has_permissions(ban_members=True)
     async def banf(self, ctx, duration: str = None, *, reason: str = None):
-        await ctx.trigger_typing()
-        messages = [msg async for msg in ctx.channel.history(limit=2)]
-        if len(messages) < 2:
-            return await ctx.send("Impossible de trouver un message précédent dans ce salon.")
-        target_msg = messages[1]
-        member = ctx.guild.get_member(target_msg.author.id)
-        if not member:
-            return await ctx.send("Impossible de trouver ce membre sur le serveur.")
-        if member == ctx.author:
-            return await ctx.send("Tu ne peux pas te ban toi-même !")
-        if member.top_role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
-            return await ctx.send("Tu ne peux pas ban un membre avec un rôle égal ou supérieur au tien.")
+        async with ctx.typing():
+            messages = [msg async for msg in ctx.channel.history(limit=2)]
+            if len(messages) < 2:
+                return await ctx.send("Impossible de trouver un message précédent dans ce salon.")
+            target_msg = messages[1]
+            member = ctx.guild.get_member(target_msg.author.id)
+            if not member:
+                return await ctx.send("Impossible de trouver ce membre sur le serveur.")
+            if member == ctx.author:
+                return await ctx.send("Tu ne peux pas te ban toi-même !")
+            if member.top_role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
+                return await ctx.send("Tu ne peux pas ban un membre avec un rôle égal ou supérieur au tien.")
 
-        delta = parse_duration(duration) if duration else None
+            delta = parse_duration(duration) if duration else None
 
-        try:
-            guild_name = ctx.guild.name
-            txt = f"Vous avez été banni du serveur **{guild_name}**"
-            if duration:
-                txt += f" pour une durée de **{duration}**"
+            try:
+                guild_name = ctx.guild.name
+                txt = f"Vous avez été banni du serveur **{guild_name}**"
+                if duration:
+                    txt += f" pour une durée de **{duration}**"
+                else:
+                    txt += " (bannissement définitif)"
+                if reason:
+                    txt += f"\nRaison : {reason}"
+                else:
+                    txt += "\nAucune raison n'a été spécifiée."
+                txt += "\n\nSi vous pensez qu'il s'agit d'une erreur, contactez le staff."
+                await member.send(txt)
+            except Exception:
+                pass
+
+            try:
+                await ctx.guild.ban(member, reason=reason or "Ban via !banf", delete_message_days=0)
+            except discord.Forbidden:
+                return await ctx.send("Je n'ai pas la permission de bannir ce membre.")
+            txt = f"{member.mention} a été banni"
+            if delta:
+                txt += f" pour {duration}"
+                until = datetime.datetime.utcnow() + delta
+                self.temp_bans.setdefault(ctx.guild.id, {})[member.id] = until
+                save_tempbans(self.temp_bans)
             else:
-                txt += " (bannissement définitif)"
+                txt += " définitivement"
             if reason:
-                txt += f"\nRaison : {reason}"
-            else:
-                txt += "\nAucune raison n'a été spécifiée."
-            txt += "\n\nSi vous pensez qu'il s'agit d'une erreur, contactez le staff."
-            await member.send(txt)
-        except Exception:
-            pass
-
-        try:
-            await ctx.guild.ban(member, reason=reason or "Ban via !banf", delete_message_days=0)
-        except discord.Forbidden:
-            return await ctx.send("Je n'ai pas la permission de bannir ce membre.")
-        txt = f"{member.mention} a été banni"
-        if delta:
-            txt += f" pour {duration}"
-            until = datetime.datetime.utcnow() + delta
-            self.temp_bans.setdefault(ctx.guild.id, {})[member.id] = until
-            save_tempbans(self.temp_bans)
-        else:
-            txt += " définitivement"
-        if reason:
-            txt += f" | Raison : {reason}"
-        await ctx.send(txt)
+                txt += f" | Raison : {reason}"
+            await ctx.send(txt)
 
     # --- !banm (ban la dernière personne mentionnée dans le salon) ---
     @commands.command(name="banm")
