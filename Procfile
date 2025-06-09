@@ -1,1 +1,1 @@
-web: python main - cod.py
+web: python main_cod.py
