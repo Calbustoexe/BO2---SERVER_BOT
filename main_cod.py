@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import asyncio
 
 # === Mini serveur HTTP pour Render ===
 class KeepAliveHandler(BaseHTTPRequestHandler):
@@ -25,16 +26,16 @@ TOKEN = os.getenv("TOKEN")
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!!", intents=intents)
 
-@bot.event
-async def on_ready():
-    await bot.change_presence(activity=discord.Game(name="Call Of Duty: Black Ops II"))
-    print(f"Connecté en tant que {bot.user.name}")
-
-    # CHARGE LES COGS ICI AVANT DE SYNCHRONISER LES SLASHS
+async def load_cogs():
     for filename in os.listdir("./cogs"):
         if filename.endswith(".py"):
             await bot.load_extension(f"cogs.{filename[:-3]}")
             print(f"Cog chargé : {filename}")
+
+@bot.event
+async def on_ready():
+    await bot.change_presence(activity=discord.Game(name="Call Of Duty: Black Ops II"))
+    print(f"Connecté en tant que {bot.user.name}")
 
     try:
         synced = await bot.tree.sync()
@@ -42,4 +43,9 @@ async def on_ready():
     except Exception as e:
         print(f"Erreur de sync : {e}")
 
-bot.run(TOKEN)
+async def main():
+    await load_cogs()  # Charge les cogs AVANT de démarrer le bot
+    await bot.start(TOKEN)
+
+if __name__ == "__main__":
+    asyncio.run(main())

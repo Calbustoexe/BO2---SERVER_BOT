@@ -40,7 +40,7 @@ ROLE_SELECT_VGAME = 1381242962528309258
 ROLE_PARTIEL = 1381243253332119672
 PING_VGAME = 1381247554129236039
 
-# --- Views persistantes (identiques à ce que tu utilises déjà) ---
+### --- Views ---
 
 class LangueSelectView(discord.ui.View):
     def __init__(self):
@@ -373,7 +373,7 @@ class Systemes(commands.Cog):
         self.bot = bot
 
     async def clear_and_send(self, channel_id, embed, view):
-        await asyncio.sleep(1)  # laisse Discord bien initialiser le salon
+        await asyncio.sleep(1)
         channel = self.bot.get_channel(channel_id)
         if not channel:
             print(f"Salon {channel_id} introuvable.")
@@ -497,11 +497,11 @@ class Systemes(commands.Cog):
                         except discord.Forbidden:
                             pass
                 if not interaction.response.is_done():
-                    await interaction.response.edit_message(content="fait, regarde comment ton profile est plus beau :D", view=None)
+                    await interaction.response.edit_message(content="Ok", view=None)
 
             elif cid == "leave_dynamic":
                 if not interaction.response.is_done():
-                    await interaction.response.edit_message(content="Ok.", view=None)
+                    await interaction.response.edit_message(content="fait, regarde comment ton profile est plus beau :D", view=None)
 
 async def setup(bot):
     await bot.add_cog(Systemes(bot))
