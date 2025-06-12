@@ -16,7 +16,6 @@ VGAME_MSG_FILE = "vgame_message_id.txt"
 RANK_MSG_FILE = "rank_message_id.txt"
 DYNAMI_MSG_FILE = "dynami_message_id.txt"
 
-# Pour garder les sélections en attente de confirmation
 pending_choices = {}
 
 # Rôles en fonction des niveaux
@@ -62,7 +61,6 @@ class LangueSelectView(discord.ui.View):
         temp = guild.get_role(ROLE_TEMP)
         role_select_vgame = guild.get_role(ROLE_SELECT_VGAME)
 
-        # Ajoute le rôle de langue choisi
         if role:
             try:
                 await user.add_roles(role)
@@ -70,14 +68,12 @@ class LangueSelectView(discord.ui.View):
                 await interaction.response.send_message("Je n'ai pas la permission d'ajouter ce rôle.", ephemeral=True)
                 return
 
-        # Ajoute systématiquement le rôle vgame
         if role_select_vgame and role_select_vgame not in user.roles:
             try:
                 await user.add_roles(role_select_vgame)
             except discord.Forbidden:
                 pass
 
-        # Retire le rôle temporaire si présent
         if temp and temp in user.roles:
             try:
                 await user.remove_roles(temp)
@@ -96,6 +92,7 @@ class LangueSelectView(discord.ui.View):
             await interaction.response.send_message(
                 "Ok, https://discordapp.com/channels/1381099938225852436/1381115963029585920", ephemeral=True
             )
+
 
 class VGameChoice(discord.ui.View):
     def __init__(self):
@@ -148,6 +145,7 @@ class VGameChoice(discord.ui.View):
                 "Ok, https://discordapp.com/channels/1381099938225852436/1381247554129236039", ephemeral=True
             )
 
+
 class VGameGate(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -175,6 +173,7 @@ class VGameGate(discord.ui.View):
             color=discord.Color.dark_green()
         )
         await interaction.response.send_message(embed=embed, view=VGameChoice(), ephemeral=True)
+
 
 class RankSelect(discord.ui.Select):
     def __init__(self):
@@ -208,6 +207,7 @@ class RankSelect(discord.ui.Select):
 
         embed = discord.Embed(title="Confirmation", description=desc, color=discord.Color.orange())
         await interaction.response.send_message(embed=embed, view=ConfirmRank(), ephemeral=True)
+
 
 class ConfirmRank(discord.ui.View):
     def __init__(self):
@@ -266,6 +266,7 @@ class ConfirmRank(discord.ui.View):
         if not interaction.response.is_done():
             await interaction.response.edit_message(content="❌ Choix annulé.", embed=None, view=None)
 
+
 class RankGate(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -292,6 +293,7 @@ class RankGate(discord.ui.View):
         view = discord.ui.View(timeout=None)
         view.add_item(RankSelect())
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
 
 class ReglementView(discord.ui.View):
     def __init__(self):
@@ -330,11 +332,13 @@ class ReglementView(discord.ui.View):
         embed.set_footer(text="The Staff BO2 FR", icon_url=icon_url)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
+
 class DynamiRoleView(View):
     def __init__(self):
         super().__init__(timeout=None)
         self.roles_ids = [1381111113793667092, 1381115349977530409]
         self.add_item(DynamiButton(label=" ", emoji="➕", custom_id="add_dynamic"))
+
 
 class DynamiButton(Button):
     def __init__(self, label, emoji, custom_id):
@@ -370,6 +374,7 @@ class DynamiButton(Button):
                 "**FR 🇫🇷** : Ton profil a été dynamisé.\n**EN 🇬🇧** : Your profile has been made dynamic.", ephemeral=True
             )
 
+
 # --- COG PRINCIPAL ---
 
 class Systemes(commands.Cog):
@@ -378,7 +383,7 @@ class Systemes(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        # Ajoute les Views persistantes (pour Discord après redémarrage)
+        # Ajoute toutes les views persistantes
         self.bot.add_view(LangueSelectView())
         self.bot.add_view(VGameGate())
         self.bot.add_view(VGameChoice())
@@ -387,7 +392,6 @@ class Systemes(commands.Cog):
         self.bot.add_view(DynamiRoleView())
         print("Systemes prêt.")
 
-        # Restaure la view du message persistants si besoin (langue, règle, vgame, rank, dynami)
         persist_infos = [
             (LANG_MSG_FILE, LangueSelectView()),
             (REGLE_MSG_FILE, ReglementView()),
