@@ -29,15 +29,17 @@ bot = commands.Bot(command_prefix="!!", intents=intents)
 async def on_ready():
     await bot.change_presence(activity=discord.Game(name="Call Of Duty: Black Ops II"))
     print(f"Connecté en tant que {bot.user.name}")
+
+    # CHARGE LES COGS ICI AVANT DE SYNCHRONISER LES SLASHS
+    for filename in os.listdir("./cogs"):
+        if filename.endswith(".py"):
+            await bot.load_extension(f"cogs.{filename[:-3]}")
+            print(f"Cog chargé : {filename}")
+
     try:
         synced = await bot.tree.sync()
         print(f"Commandes slash synchronisées : {len(synced)}")
     except Exception as e:
         print(f"Erreur de sync : {e}")
-
-    for filename in os.listdir("./cogs"):
-        if filename.endswith(".py"):
-            await bot.load_extension(f"cogs.{filename[:-3]}")
-            print(f"Cog chargé : {filename}")
 
 bot.run(TOKEN)
