@@ -40,7 +40,7 @@ ROLE_SELECT_VGAME = 1381242962528309258
 ROLE_PARTIEL = 1381243253332119672
 PING_VGAME = 1381247554129236039
 
-# --- Views persistantes (inchangées pour la logique des boutons) ---
+# --- Views persistantes (identiques à ce que tu utilises déjà) ---
 
 class LangueSelectView(discord.ui.View):
     def __init__(self):
@@ -366,7 +366,6 @@ class DynamiButton(Button):
                 "**FR 🇫🇷** : Ton profil a été dynamisé.\n**EN 🇬🇧** : Your profile has been made dynamic.", ephemeral=True
             )
 
-
 # --- COG PRINCIPAL ---
 
 class Systemes(commands.Cog):
@@ -503,9 +502,6 @@ class Systemes(commands.Cog):
             elif cid == "leave_dynamic":
                 if not interaction.response.is_done():
                     await interaction.response.edit_message(content="Ok.", view=None)
-
-    # Toutes les commandes manuelles peuvent rester mais ne servent plus à rien
-    # (tu peux les supprimer pour forcer le mode auto, ou les garder pour debug)
 
 async def setup(bot):
     await bot.add_cog(Systemes(bot))
