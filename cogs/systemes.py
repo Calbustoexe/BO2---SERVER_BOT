@@ -1,10 +1,9 @@
 import discord
 from discord.ext import commands
 from discord.ui import View, Button, Select
-import json
 import os
 
-# IDs fixes
+# --- Constantes d'ID ---
 ROLE_FR = 1381246908932161669
 ROLE_EN = 1381246992675770379
 ROLE_TEMP = 1381246686738776234
@@ -13,6 +12,9 @@ PING_CHANNEL = 1381115963029585920
 # Fichiers pour la persistance
 LANG_MSG_FILE = "lang_message_id.txt"
 REGLE_MSG_FILE = "regle_message_id.txt"
+VGAME_MSG_FILE = "vgame_message_id.txt"
+RANK_MSG_FILE = "rank_message_id.txt"
+DYNAMI_MSG_FILE = "dynami_message_id.txt"
 
 # Pour garder les sélections en attente de confirmation
 pending_choices = {}
@@ -39,6 +41,8 @@ ROLE_SELECT_VGAME = 1381242962528309258
 ROLE_PARTIEL = 1381243253332119672
 PING_VGAME = 1381247554129236039
 
+# --- Views Persistantes ---
+
 class LangueSelectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -56,7 +60,7 @@ class LangueSelectView(discord.ui.View):
         guild = interaction.guild
         role = guild.get_role(role_id)
         temp = guild.get_role(ROLE_TEMP)
-        role_select_vgame = guild.get_role(ROLE_SELECT_VGAME)  # Ajout du rôle vgame
+        role_select_vgame = guild.get_role(ROLE_SELECT_VGAME)
 
         # Ajoute le rôle de langue choisi
         if role:
@@ -366,55 +370,48 @@ class DynamiButton(Button):
                 "**FR 🇫🇷** : Ton profil a été dynamisé.\n**EN 🇬🇧** : Your profile has been made dynamic.", ephemeral=True
             )
 
+# --- COG PRINCIPAL ---
+
 class Systemes(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     @commands.Cog.listener()
     async def on_ready(self):
-        # Ajout des views persistantes
+        # Ajoute les Views persistantes (pour Discord après redémarrage)
         self.bot.add_view(LangueSelectView())
         self.bot.add_view(VGameGate())
         self.bot.add_view(VGameChoice())
         self.bot.add_view(RankGate())
         self.bot.add_view(ReglementView())
+        self.bot.add_view(DynamiRoleView())
         print("Systemes prêt.")
 
-        # Restaure la view du message de langue si besoin
-        if os.path.exists(LANG_MSG_FILE):
-            try:
-                with open(LANG_MSG_FILE, "r") as f:
-                    line = f.read().strip()
-                    if "-" in line:
-                        channel_id, message_id = map(int, line.split("-"))
-                        channel = self.bot.get_channel(channel_id)
-                        if channel:
-                            try:
-                                msg = await channel.fetch_message(message_id)
-                                await msg.edit(view=LangueSelectView())
-                                print("✅ View persistante (langue) restaurée.")
-                            except discord.NotFound:
-                                print("❌ Ancien message de langue introuvable, il faut relancer sendlangue.")
-            except Exception as e:
-                print(f"❌ Impossible de restaurer la view langue : {e}")
-
-        # Restaure la view du message de règlement si besoin
-        if os.path.exists(REGLE_MSG_FILE):
-            try:
-                with open(REGLE_MSG_FILE, "r") as f:
-                    line = f.read().strip()
-                    if "-" in line:
-                        channel_id, message_id = map(int, line.split("-"))
-                        channel = self.bot.get_channel(channel_id)
-                        if channel:
-                            try:
-                                msg = await channel.fetch_message(message_id)
-                                await msg.edit(view=ReglementView())
-                                print("✅ View persistante (règlement) restaurée.")
-                            except discord.NotFound:
-                                print("❌ Ancien message règlement introuvable, il faut relancer panel_regle.")
-            except Exception as e:
-                print(f"❌ Impossible de restaurer la view règlement : {e}")
+        # Restaure la view du message persistants si besoin (langue, règle, vgame, rank, dynami)
+        persist_infos = [
+            (LANG_MSG_FILE, LangueSelectView()),
+            (REGLE_MSG_FILE, ReglementView()),
+            (VGAME_MSG_FILE, VGameGate()),
+            (RANK_MSG_FILE, RankGate()),
+            (DYNAMI_MSG_FILE, DynamiRoleView()),
+        ]
+        for file, view in persist_infos:
+            if os.path.exists(file):
+                try:
+                    with open(file, "r") as f:
+                        line = f.read().strip()
+                        if "-" in line:
+                            channel_id, message_id = map(int, line.split("-"))
+                            channel = self.bot.get_channel(channel_id)
+                            if channel:
+                                try:
+                                    msg = await channel.fetch_message(message_id)
+                                    await msg.edit(view=view)
+                                    print(f"✅ View persistante restaurée pour {file}")
+                                except discord.NotFound:
+                                    print(f"❌ Ancien message introuvable ({file}), il faut relancer la commande associée.")
+                except Exception as e:
+                    print(f"❌ Impossible de restaurer la view pour {file} : {e}")
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
@@ -459,7 +456,6 @@ class Systemes(commands.Cog):
             color=discord.Color.blurple()
         )
         msg = await ctx.send(embed=embed, view=LangueSelectView())
-        # Met à jour le fichier de persistance à chaque envoi du message
         with open(LANG_MSG_FILE, "w") as f:
             f.write(f"{ctx.channel.id}-{msg.id}")
 
@@ -470,7 +466,9 @@ class Systemes(commands.Cog):
             description="Clique pour continuer. Nous acceptons sans soucis les cracks :D",
             color=discord.Color.greyple()
         )
-        await ctx.send(embed=embed, view=VGameGate())
+        msg = await ctx.send(embed=embed, view=VGameGate())
+        with open(VGAME_MSG_FILE, "w") as f:
+            f.write(f"{ctx.channel.id}-{msg.id}")
 
     @commands.command()
     async def sendrank(self, ctx):
@@ -479,7 +477,9 @@ class Systemes(commands.Cog):
             description="Clique pour afficher le menu.",
             color=discord.Color.dark_teal()
         )
-        await ctx.send(embed=embed, view=RankGate())
+        msg = await ctx.send(embed=embed, view=RankGate())
+        with open(RANK_MSG_FILE, "w") as f:
+            f.write(f"{ctx.channel.id}-{msg.id}")
 
     @commands.command()
     async def panel_regle(self, ctx):
@@ -513,7 +513,6 @@ class Systemes(commands.Cog):
         )
         embed.set_footer(text="Le Staff BO2 FR", icon_url=icon_url)
         msg = await ctx.send(embed=embed, view=ReglementView())
-        # Met à jour le fichier de persistance à chaque envoi du message
         with open(REGLE_MSG_FILE, "w") as f:
             f.write(f"{ctx.channel.id}-{msg.id}")
 
@@ -527,8 +526,9 @@ class Systemes(commands.Cog):
             ),
             color=0xFF6600
         )
-        view = DynamiRoleView()
-        await ctx.send(embed=embed, view=view)
+        msg = await ctx.send(embed=embed, view=DynamiRoleView())
+        with open(DYNAMI_MSG_FILE, "w") as f:
+            f.write(f"{ctx.channel.id}-{msg.id}")
 
 async def setup(bot):
     await bot.add_cog(Systemes(bot))
