@@ -207,7 +207,7 @@ class Utilitaire(commands.Cog):
             json.dump(self.logs, f, indent=4)
 
     # ----------- Message All -----------
-    @commands.hybrid_command(name="message_all", description="Envoyer un message à tout le monde dans le serveur.")
+    @commands.hybrid_command(name="message_all", description="Envoyer un message à tout le monde dans le serveur")
     @commands.has_permissions(administrator=True)
     async def message_all(self, ctx, title: str, content: str, footer: str, color: str = "#3498db"):
         embed = self.create_embed(title, content, footer, color)
