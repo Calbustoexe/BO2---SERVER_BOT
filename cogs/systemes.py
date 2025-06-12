@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from discord.ui import View, Button, Select
-import os
+import asyncio
 
 # --- Constantes d'ID ---
 ROLE_FR = 1381246908932161669
@@ -9,12 +9,12 @@ ROLE_EN = 1381246992675770379
 ROLE_TEMP = 1381246686738776234
 PING_CHANNEL = 1381115963029585920
 
-# Fichiers pour la persistance
-LANG_MSG_FILE = "lang_message_id.txt"
-REGLE_MSG_FILE = "regle_message_id.txt"
-VGAME_MSG_FILE = "vgame_message_id.txt"
-RANK_MSG_FILE = "rank_message_id.txt"
-DYNAMI_MSG_FILE = "dynami_message_id.txt"
+# IDs salons cibles pour chaque panneau
+SALON_REGLE = 1381100094748622919
+SALON_LANGUE = 1381115892477464666
+SALON_VGAME = 1381115963029585920
+SALON_RANK = 1381247554129236039
+SALON_DYNAMI = 1381615980182245396
 
 pending_choices = {}
 
@@ -40,7 +40,7 @@ ROLE_SELECT_VGAME = 1381242962528309258
 ROLE_PARTIEL = 1381243253332119672
 PING_VGAME = 1381247554129236039
 
-# --- Views Persistantes ---
+# --- Views persistantes (inchangées pour la logique des boutons) ---
 
 class LangueSelectView(discord.ui.View):
     def __init__(self):
@@ -93,7 +93,6 @@ class LangueSelectView(discord.ui.View):
                 "Ok, https://discordapp.com/channels/1381099938225852436/1381115963029585920", ephemeral=True
             )
 
-
 class VGameChoice(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -145,7 +144,6 @@ class VGameChoice(discord.ui.View):
                 "Ok, https://discordapp.com/channels/1381099938225852436/1381247554129236039", ephemeral=True
             )
 
-
 class VGameGate(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -173,7 +171,6 @@ class VGameGate(discord.ui.View):
             color=discord.Color.dark_green()
         )
         await interaction.response.send_message(embed=embed, view=VGameChoice(), ephemeral=True)
-
 
 class RankSelect(discord.ui.Select):
     def __init__(self):
@@ -207,7 +204,6 @@ class RankSelect(discord.ui.Select):
 
         embed = discord.Embed(title="Confirmation", description=desc, color=discord.Color.orange())
         await interaction.response.send_message(embed=embed, view=ConfirmRank(), ephemeral=True)
-
 
 class ConfirmRank(discord.ui.View):
     def __init__(self):
@@ -266,7 +262,6 @@ class ConfirmRank(discord.ui.View):
         if not interaction.response.is_done():
             await interaction.response.edit_message(content="❌ Choix annulé.", embed=None, view=None)
 
-
 class RankGate(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -293,7 +288,6 @@ class RankGate(discord.ui.View):
         view = discord.ui.View(timeout=None)
         view.add_item(RankSelect())
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
 
 class ReglementView(discord.ui.View):
     def __init__(self):
@@ -332,13 +326,11 @@ class ReglementView(discord.ui.View):
         embed.set_footer(text="The Staff BO2 FR", icon_url=icon_url)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-
 class DynamiRoleView(View):
     def __init__(self):
         super().__init__(timeout=None)
         self.roles_ids = [1381111113793667092, 1381115349977530409]
         self.add_item(DynamiButton(label=" ", emoji="➕", custom_id="add_dynamic"))
-
 
 class DynamiButton(Button):
     def __init__(self, label, emoji, custom_id):
@@ -381,41 +373,101 @@ class Systemes(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    async def clear_and_send(self, channel_id, embed, view):
+        await asyncio.sleep(1)  # laisse Discord bien initialiser le salon
+        channel = self.bot.get_channel(channel_id)
+        if not channel:
+            print(f"Salon {channel_id} introuvable.")
+            return
+        # Supprimer TOUS les messages du bot dans ce salon (pour l'ordre, on ne supprime que les siens)
+        async for msg in channel.history(limit=100):
+            if msg.author == self.bot.user:
+                try:
+                    await msg.delete()
+                except Exception:
+                    pass
+        # Envoie le nouveau message
+        await channel.send(embed=embed, view=view)
+
     @commands.Cog.listener()
     async def on_ready(self):
-        # Ajoute toutes les views persistantes
         self.bot.add_view(LangueSelectView())
         self.bot.add_view(VGameGate())
         self.bot.add_view(VGameChoice())
         self.bot.add_view(RankGate())
         self.bot.add_view(ReglementView())
         self.bot.add_view(DynamiRoleView())
-        print("Systemes prêt.")
+        print("Systemes prêt. Rafraîchissement automatique des panneaux...")
 
-        persist_infos = [
-            (LANG_MSG_FILE, LangueSelectView()),
-            (REGLE_MSG_FILE, ReglementView()),
-            (VGAME_MSG_FILE, VGameGate()),
-            (RANK_MSG_FILE, RankGate()),
-            (DYNAMI_MSG_FILE, DynamiRoleView()),
-        ]
-        for file, view in persist_infos:
-            if os.path.exists(file):
-                try:
-                    with open(file, "r") as f:
-                        line = f.read().strip()
-                        if "-" in line:
-                            channel_id, message_id = map(int, line.split("-"))
-                            channel = self.bot.get_channel(channel_id)
-                            if channel:
-                                try:
-                                    msg = await channel.fetch_message(message_id)
-                                    await msg.edit(view=view)
-                                    print(f"✅ View persistante restaurée pour {file}")
-                                except discord.NotFound:
-                                    print(f"❌ Ancien message introuvable ({file}), il faut relancer la commande associée.")
-                except Exception as e:
-                    print(f"❌ Impossible de restaurer la view pour {file} : {e}")
+        # 1. Règlement
+        icon_url = None
+        guild = self.bot.guilds[0] if self.bot.guilds else None
+        if guild and guild.icon:
+            icon_url = guild.icon.url
+        embed_regle = discord.Embed(
+            title="📜 Règlement du serveur",
+            description="""
+**I. Respect mutuel**
+- On s’adresse aux autres comme on aimerait qu’on s’adresse à nous. Aucune insulte gratuite, comportement toxique ou harcèlement ne sera toléré dans un autre cadre qu'humoristique
+- Déclaration de haine, complot, proclamations religieuses, problème relationnel, c'est hors du serveur, merci.
+
+**II. Pas de contenu déplacé**
+- Tout ce qui est NSFW, choquant, haineux ou illégal nous n'en voulons pas, restons sur les trafique dans le jeu.
+
+**III. Pas de spam, pub ou flood**
+- Toute forme de publicité (hors salons concernés) est interdit sur le serveur.
+
+**IV. Respect de thème de salon**
+- Tous les salons ont un sujet propre à lui, veillez vous assurez de respecter celui-ci avant de posté un message
+- La plus part d'entre eux, si ce n'est la totalité, ont une description, prend le temps de lire. En cas d'incompréhension, les tickets sont là.
+
+**V. Le staff a le dernier mot**
+- Le staff tranchera toujours les conflits, alors il est inutile d'insulté ou de proclamer de la haine, si vous avez un problème avec un membre du staff. Le haut Staff (admin') peut s'en charger, les tickets sont disponible pour ça aussi.
+
+**VI. Profile**
+- Si votre profile affiche du contenu explicite, votre compte risque de passé en quarantaine dans le serveur.
+
+**VII.** : Ne soit pas idiot
+            """,
+            color=0x1e1f22
+        )
+        embed_regle.set_footer(text="Le Staff BO2 FR", icon_url=icon_url)
+        await self.clear_and_send(SALON_REGLE, embed_regle, ReglementView())
+
+        # 2. Langue
+        embed_langue = discord.Embed(
+            title="🌐 Choisissez votre langue | Which language do you speak?",
+            description="Veuillez sélectionner votre langue pour continuer :",
+            color=discord.Color.blurple()
+        )
+        await self.clear_and_send(SALON_LANGUE, embed_langue, LangueSelectView())
+
+        # 3. VGame
+        embed_vgame = discord.Embed(
+            title="Crack OU legit ?",
+            description="Clique pour continuer. Nous acceptons sans soucis les cracks :D",
+            color=discord.Color.greyple()
+        )
+        await self.clear_and_send(SALON_VGAME, embed_vgame, VGameGate())
+
+        # 4. Rank
+        embed_rank = discord.Embed(
+            title="🎖️ Quel est votre niveau en jeu ? | What's your level in game",
+            description="Clique pour afficher le menu.",
+            color=discord.Color.dark_teal()
+        )
+        await self.clear_and_send(SALON_RANK, embed_rank, RankGate())
+
+        # 5. Dynami profil
+        embed_dynami = discord.Embed(
+            title="Profils Dynamiques",
+            description=(
+                "**FR 🇫🇷** : Rendre votre profil plus dynamique en réorganisant vos rôles\n"
+                "**EN 🇬🇧** : Make your profile more dynamic by reorganizing your roles"
+            ),
+            color=0xFF6600
+        )
+        await self.clear_and_send(SALON_DYNAMI, embed_dynami, DynamiRoleView())
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
@@ -452,87 +504,8 @@ class Systemes(commands.Cog):
                 if not interaction.response.is_done():
                     await interaction.response.edit_message(content="Ok.", view=None)
 
-    @commands.command()
-    async def sendlangue(self, ctx):
-        embed = discord.Embed(
-            title="🌐 Choisissez votre langue | Which language do you speak?",
-            description="Veuillez sélectionner votre langue pour continuer :",
-            color=discord.Color.blurple()
-        )
-        msg = await ctx.send(embed=embed, view=LangueSelectView())
-        with open(LANG_MSG_FILE, "w") as f:
-            f.write(f"{ctx.channel.id}-{msg.id}")
-
-    @commands.command()
-    async def sendvgame(self, ctx):
-        embed = discord.Embed(
-            title="Crack OU legit ?",
-            description="Clique pour continuer. Nous acceptons sans soucis les cracks :D",
-            color=discord.Color.greyple()
-        )
-        msg = await ctx.send(embed=embed, view=VGameGate())
-        with open(VGAME_MSG_FILE, "w") as f:
-            f.write(f"{ctx.channel.id}-{msg.id}")
-
-    @commands.command()
-    async def sendrank(self, ctx):
-        embed = discord.Embed(
-            title="🎖️ Quel est votre niveau en jeu ? | What's your level in game",
-            description="Clique pour afficher le menu.",
-            color=discord.Color.dark_teal()
-        )
-        msg = await ctx.send(embed=embed, view=RankGate())
-        with open(RANK_MSG_FILE, "w") as f:
-            f.write(f"{ctx.channel.id}-{msg.id}")
-
-    @commands.command()
-    async def panel_regle(self, ctx):
-        icon_url = ctx.guild.icon.url if ctx.guild and ctx.guild.icon else None
-        embed = discord.Embed(
-            title="📜 Règlement du serveur",
-            description="""
-**I. Respect mutuel**
-- On s’adresse aux autres comme on aimerait qu’on s’adresse à nous. Aucune insulte gratuite, comportement toxique ou harcèlement ne sera toléré dans un autre cadre qu'humoristique
-- Déclaration de haine, complot, proclamations religieuses, problème relationnel, c'est hors du serveur, merci.
-
-**II. Pas de contenu déplacé**
-- Tout ce qui est NSFW, choquant, haineux ou illégal nous n'en voulons pas, restons sur les trafique dans le jeu.
-
-**III. Pas de spam, pub ou flood**
-- Toute forme de publicité (hors salons concernés) est interdit sur le serveur.
-
-**IV. Respect de thème de salon**
-- Tous les salons ont un sujet propre à lui, veillez vous assurez de respecter celui-ci avant de posté un message
-- La plus part d'entre eux, si ce n'est la totalité, ont une description, prend le temps de lire. En cas d'incompréhension, les tickets sont là.
-
-**V. Le staff a le dernier mot**
-- Le staff tranchera toujours les conflits, alors il est inutile d'insulté ou de proclamer de la haine, si vous avez un problème avec un membre du staff. Le haut Staff (admin') peut s'en charger, les tickets sont disponible pour ça aussi.
-
-**VI. Profile**
-- Si votre profile affiche du contenu explicite, votre compte risque de passé en quarantaine dans le serveur.
-            
-**VII.** : Ne soit pas idiot
-            """,
-            color=0x1e1f22
-        )
-        embed.set_footer(text="Le Staff BO2 FR", icon_url=icon_url)
-        msg = await ctx.send(embed=embed, view=ReglementView())
-        with open(REGLE_MSG_FILE, "w") as f:
-            f.write(f"{ctx.channel.id}-{msg.id}")
-
-    @commands.command(name="dynameprof_role")
-    async def dynameprof_role(self, ctx):
-        embed = discord.Embed(
-            title="Profils Dynamiques",
-            description=(
-                "**FR 🇫🇷** : Rendre votre profil plus dynamique en réorganisant vos rôles\n"
-                "**EN 🇬🇧** : Make your profile more dynamic by reorganizing your roles"
-            ),
-            color=0xFF6600
-        )
-        msg = await ctx.send(embed=embed, view=DynamiRoleView())
-        with open(DYNAMI_MSG_FILE, "w") as f:
-            f.write(f"{ctx.channel.id}-{msg.id}")
+    # Toutes les commandes manuelles peuvent rester mais ne servent plus à rien
+    # (tu peux les supprimer pour forcer le mode auto, ou les garder pour debug)
 
 async def setup(bot):
     await bot.add_cog(Systemes(bot))
